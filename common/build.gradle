@@ -53,6 +53,9 @@ kotlin {
 }
 
 protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:3.0.0"
+    }
     plugins {
         javalite {
             def dependency = libs.google.protobuf.liteGen.get()

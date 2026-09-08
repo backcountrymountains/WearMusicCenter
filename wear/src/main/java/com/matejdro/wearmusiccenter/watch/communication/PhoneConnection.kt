@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -80,19 +81,31 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
 
     private var running = AtomicBoolean(false)
 
+    // Bumped on every start(). Lets a stop() that suspended over a slow Bluetooth
+    // round trip notice that a start() overtook it, so it does not tear down the
+    // connection that start() just established.
+    private val generation = AtomicInteger(0)
+
     init {
         lifecycleObserver.addLiveData(musicState)
         lifecycleObserver.addLiveData(albumArt)
     }
 
-    private fun start() {
+    /**
+     * Bring the connection up. Returns false when it was already considered
+     * running, in which case nothing was sent to the phone.
+     */
+    private fun start(): Boolean {
         if (!running.compareAndSet(false, true)) {
-            return
+            return false
         }
 
-        scope = CoroutineScope(Job() + Dispatchers.Main)
+        generation.incrementAndGet()
 
-        scope?.launchWithErrorHandling(context, musicState) {
+        val startedScope = CoroutineScope(Job() + Dispatchers.Main)
+        scope = startedScope
+
+        startedScope.launchWithErrorHandling(context, musicState) {
             val capabilities = capabilityClient.getCapability(
                     CommPaths.PHONE_APP_CAPABILITY,
                     CapabilityClient.FILTER_REACHABLE
@@ -100,14 +113,63 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
 
             onWatchConnectionUpdated(capabilities)
 
-            dataClient.addListener(this)
-            capabilityClient.addListener(this, CommPaths.PHONE_APP_CAPABILITY)
+            dataClient.addListener(this@PhoneConnection)
+            capabilityClient.addListener(this@PhoneConnection, CommPaths.PHONE_APP_CAPABILITY)
 
             loadCurrentActionConfig(CommPaths.DATA_PLAYING_ACTION_CONFIG, rawPlaybackConfig)
             loadCurrentActionConfig(CommPaths.DATA_STOPPING_ACTION_CONFIG, rawStoppedConfig)
             loadCurrentActionConfig(CommPaths.DATA_LIST_ITEMS, rawActionMenuConfig)
 
             musicState.postValue(Resource.loading(null))
+
+            // The phone's push may never arrive (dropped message, or its MusicService
+            // was killed). The last state it published is still sitting in the data
+            // layer, so seed the UI from that instead of spinning forever.
+            loadCurrentMusicState()
+        }
+
+        return true
+    }
+
+    /**
+     * Ask the phone to send its current music state.
+     *
+     * This is the only recovery path when the phone's MusicService has been killed
+     * (ACK timeout, Doze, or the OEM's background limits) while this side still
+     * believes the connection is alive: the message restarts that service through
+     * WatchListenerService, which then transmits fresh state.
+     */
+    private fun requestResync() {
+        val activeScope = scope ?: return
+
+        activeScope.launchWithErrorHandling(context, musicState) {
+            val phoneNode = nodeClient.getNearestNodeId() ?: return@launchWithErrorHandling
+            messageClient.sendMessage(phoneNode, CommPaths.MESSAGE_WATCH_OPENED, null).await()
+        }
+    }
+
+    /**
+     * Seed [musicState] from the music state DataItem already held by the data layer,
+     * without clobbering a fresher value that arrived while this was in flight.
+     */
+    private suspend fun loadCurrentMusicState() {
+        val dataItems = dataClient.getDataItems(
+                Uri.parse("wear://*${CommPaths.DATA_MUSIC_STATE}"),
+                DataClient.FILTER_LITERAL
+        ).await()
+
+        try {
+            val dataItem = dataItems.firstOrNull() ?: return
+            if (musicState.value?.status == Resource.Status.SUCCESS) {
+                return
+            }
+
+            val storedState = MusicState.parseFrom(dataItem.freeze().data)
+            if (!storedState.error) {
+                musicState.postValue(Resource.success(storedState))
+            }
+        } finally {
+            dataItems.release()
         }
     }
 
@@ -116,16 +178,33 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
             return
         }
 
-        scope?.launchWithErrorHandling(context, musicState) {
+        val stoppingScope = scope ?: return
+        val stoppingGeneration = generation.get()
+
+        stoppingScope.launchWithErrorHandling(context, musicState) {
             try {
-                dataClient.removeListener(this)
+                if (running.get()) {
+                    // A start() already overtook us; leave its listener registered.
+                    return@launchWithErrorHandling
+                }
+
+                dataClient.removeListener(this@PhoneConnection)
 
                 val phoneNode = nodeClient.getNearestNodeId()
-                if (phoneNode != null) {
+
+                // getNearestNodeId() can suspend for seconds over Bluetooth. If a
+                // start() ran in that window, sending WATCH_CLOSED now would make the
+                // phone stopSelf() its MusicService while the watch app is open, and
+                // the watch would never receive another update.
+                if (phoneNode != null &&
+                        generation.get() == stoppingGeneration &&
+                        !running.get()) {
                     messageClient.sendMessage(phoneNode, CommPaths.MESSAGE_WATCH_CLOSED, null).await()
                 }
             } finally {
-                scope?.cancel()
+                // Cancel the scope captured above, never the current field: a
+                // concurrent start() may already have replaced it with a live one.
+                stoppingScope.cancel()
             }
 
         }
@@ -322,7 +401,14 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
 
     override fun onActive() {
         closeHandler.removeMessages(MESSAGE_CLOSE_CONNECTION)
-        start()
+
+        if (!start()) {
+            // Already running, so start() sent nothing. That is the state the watch
+            // gets stuck in: the activity is never destroyed (screen off keeps it
+            // STARTED), onInactive never fires, and so the phone is never asked for
+            // state again even though its service may have died long ago. Ask now.
+            requestResync()
+        }
     }
 
     suspend fun openPlaybackQueue() {
