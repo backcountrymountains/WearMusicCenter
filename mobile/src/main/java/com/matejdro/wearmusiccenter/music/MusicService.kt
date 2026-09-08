@@ -430,6 +430,9 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
 
         when (event.path) {
             CommPaths.MESSAGE_WATCH_CLOSED -> {
+                // The only routine way this service dies. If it stops without this
+                // line just above it in the log, the system killed it instead.
+                Timber.d("Watch reported closed, stopping service")
                 stopSelf()
             }
             CommPaths.MESSAGE_ACK -> {

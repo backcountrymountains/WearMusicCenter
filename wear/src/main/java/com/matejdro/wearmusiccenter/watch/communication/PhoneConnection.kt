@@ -39,6 +39,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.lang.ref.WeakReference
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -97,10 +98,12 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
      */
     private fun start(): Boolean {
         if (!running.compareAndSet(false, true)) {
+            Timber.d("start: already running at generation %d, nothing sent", generation.get())
             return false
         }
 
-        generation.incrementAndGet()
+        val startedGeneration = generation.incrementAndGet()
+        Timber.d("start: opening connection, generation %d", startedGeneration)
 
         val startedScope = CoroutineScope(Job() + Dispatchers.Main)
         scope = startedScope
@@ -140,11 +143,21 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
      * WatchListenerService, which then transmits fresh state.
      */
     private fun requestResync() {
-        val activeScope = scope ?: return
+        val activeScope = scope
+        if (activeScope == null) {
+            Timber.w("resync: no active scope, cannot ask the phone for state")
+            return
+        }
 
         activeScope.launchWithErrorHandling(context, musicState) {
-            val phoneNode = nodeClient.getNearestNodeId() ?: return@launchWithErrorHandling
+            val phoneNode = nodeClient.getNearestNodeId()
+            if (phoneNode == null) {
+                Timber.w("resync: no nearby phone node")
+                return@launchWithErrorHandling
+            }
+
             messageClient.sendMessage(phoneNode, CommPaths.MESSAGE_WATCH_OPENED, null).await()
+            Timber.d("resync: requested state from phone node %s", phoneNode)
         }
     }
 
@@ -159,13 +172,21 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
         ).await()
 
         try {
-            val dataItem = dataItems.firstOrNull() ?: return
+            val dataItem = dataItems.firstOrNull()
+            if (dataItem == null) {
+                Timber.d("seed: no stored music state in the data layer")
+                return
+            }
             if (musicState.value?.status == Resource.Status.SUCCESS) {
+                Timber.d("seed: fresher state already arrived, keeping it")
                 return
             }
 
             val storedState = MusicState.parseFrom(dataItem.freeze().data)
-            if (!storedState.error) {
+            if (storedState.error) {
+                Timber.d("seed: stored state is an error state, ignoring")
+            } else {
+                Timber.d("seed: using stored state (playing=%b)", storedState.playing)
                 musicState.postValue(Resource.success(storedState))
             }
         } finally {
@@ -185,6 +206,7 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
             try {
                 if (running.get()) {
                     // A start() already overtook us; leave its listener registered.
+                    Timber.d("stop: start() overtook us before teardown, aborting stop")
                     return@launchWithErrorHandling
                 }
 
@@ -196,10 +218,19 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
                 // start() ran in that window, sending WATCH_CLOSED now would make the
                 // phone stopSelf() its MusicService while the watch app is open, and
                 // the watch would never receive another update.
-                if (phoneNode != null &&
-                        generation.get() == stoppingGeneration &&
-                        !running.get()) {
+                if (phoneNode == null) {
+                    Timber.d("stop: no nearby phone node, nothing to notify")
+                } else if (generation.get() != stoppingGeneration || running.get()) {
+                    Timber.w(
+                            "stop: start() overtook us during the phone round trip " +
+                                    "(generation %d -> %d, running=%b); skipping WATCH_CLOSED",
+                            stoppingGeneration,
+                            generation.get(),
+                            running.get()
+                    )
+                } else {
                     messageClient.sendMessage(phoneNode, CommPaths.MESSAGE_WATCH_CLOSED, null).await()
+                    Timber.d("stop: told the phone we closed (generation %d)", stoppingGeneration)
                 }
             } finally {
                 // Cancel the scope captured above, never the current field: a
@@ -407,6 +438,7 @@ class PhoneConnection @Inject constructor(@ApplicationContext private val contex
             // gets stuck in: the activity is never destroyed (screen off keeps it
             // STARTED), onInactive never fires, and so the phone is never asked for
             // state again even though its service may have died long ago. Ask now.
+            Timber.d("onActive: connection considered live, forcing a resync")
             requestResync()
         }
     }
