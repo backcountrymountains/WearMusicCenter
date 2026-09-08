@@ -4,8 +4,16 @@ import android.app.Dialog
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.AttributeSet
+import android.view.LayoutInflater
 import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.EditText
+import android.widget.ListView
+import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.DialogPreference
 import androidx.preference.PreferenceDialogFragmentCompat
@@ -78,14 +86,23 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
         }
 
         private lateinit var installedApps: List<App>
-        private lateinit var selectedApps: BooleanArray
+
+        /** Packages allowed to auto-start, i.e. everything not on the persisted blacklist. */
+        private val allowedPackages = HashSet<String>()
+
+        private var filteredApps: List<App> = emptyList()
+
+        private lateinit var listView: ListView
+        private lateinit var listAdapter: ArrayAdapter<String>
+        private lateinit var selectionSummary: TextView
 
         override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
             installedApps = (preference as MusicAppListPreference).appList ?: emptyList()
 
             val savedBlacklist = (preference as MusicAppListPreference).blacklist
-            selectedApps =
-                BooleanArray(installedApps.size) { !savedBlacklist.contains(installedApps[it].pkg) }
+            allowedPackages.clear()
+            installedApps.filterNot { savedBlacklist.contains(it.pkg) }
+                .mapTo(allowedPackages) { it.pkg }
 
             return super.onCreateDialog(savedInstanceState)
         }
@@ -96,25 +113,101 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
             }
 
             val newBlacklist = HashSet<String>(installedApps
-                .filterIndexed { index, _ -> !selectedApps[index] }
+                .filterNot { allowedPackages.contains(it.pkg) }
                 .map { it.pkg })
 
             (preference as MusicAppListPreference).blacklist = newBlacklist
         }
 
         override fun onPrepareDialogBuilder(builder: AlertDialog.Builder) {
-            builder.setMultiChoiceItems(
-                installedApps.map { it.label }.toTypedArray(),
-                selectedApps
-            ) { _, which, isChecked ->
-                selectedApps[which] = isChecked
-            }
-                .setPositiveButton(android.R.string.ok, this)
+            builder.setPositiveButton(android.R.string.ok, this)
                 .setNegativeButton(android.R.string.cancel, this)
         }
 
-        override fun onCreateDialogView(context: Context): View? {
-            return null
+        override fun onCreateDialogView(context: Context): View {
+            return LayoutInflater.from(context).inflate(R.layout.dialog_app_list, null)
+        }
+
+        override fun onBindDialogView(view: View) {
+            super.onBindDialogView(view)
+
+            listView = view.findViewById(R.id.app_list)
+            selectionSummary = view.findViewById(R.id.selection_summary)
+
+            listAdapter = ArrayAdapter(
+                view.context,
+                android.R.layout.simple_list_item_multiple_choice,
+                ArrayList<String>()
+            )
+            listView.adapter = listAdapter
+            listView.choiceMode = ListView.CHOICE_MODE_MULTIPLE
+
+            listView.setOnItemClickListener { _, _, position, _ ->
+                val pkg = filteredApps[position].pkg
+                if (listView.isItemChecked(position)) {
+                    allowedPackages.add(pkg)
+                } else {
+                    allowedPackages.remove(pkg)
+                }
+                updateSummary()
+            }
+
+            // Bulk actions apply to whatever the filter currently shows, so "type a
+            // name, deselect all" works as well as clearing the whole list at once.
+            view.findViewById<Button>(R.id.select_all).setOnClickListener {
+                filteredApps.mapTo(allowedPackages) { app -> app.pkg }
+                applyCheckedState()
+            }
+            view.findViewById<Button>(R.id.deselect_all).setOnClickListener {
+                filteredApps.forEach { app -> allowedPackages.remove(app.pkg) }
+                applyCheckedState()
+            }
+
+            view.findViewById<EditText>(R.id.app_filter).addTextChangedListener(
+                object : TextWatcher {
+                    override fun afterTextChanged(s: Editable?) = applyFilter(s?.toString() ?: "")
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
+                }
+            )
+
+            applyFilter("")
+        }
+
+        private fun applyFilter(query: String) {
+            val trimmed = query.trim()
+            filteredApps = if (trimmed.isEmpty()) {
+                installedApps
+            } else {
+                installedApps.filter {
+                    it.label.contains(trimmed, ignoreCase = true) ||
+                            it.pkg.contains(trimmed, ignoreCase = true)
+                }
+            }
+
+            listAdapter.setNotifyOnChange(false)
+            listAdapter.clear()
+            listAdapter.addAll(filteredApps.map { it.label })
+            listAdapter.notifyDataSetChanged()
+
+            applyCheckedState()
+        }
+
+        private fun applyCheckedState() {
+            // ListView tracks checks by position, so they must be reapplied whenever
+            // the backing list changes.
+            for (index in filteredApps.indices) {
+                listView.setItemChecked(index, allowedPackages.contains(filteredApps[index].pkg))
+            }
+            updateSummary()
+        }
+
+        private fun updateSummary() {
+            selectionSummary.text = selectionSummary.context.getString(
+                R.string.app_list_selection_summary,
+                allowedPackages.size,
+                installedApps.size
+            )
         }
     }
 

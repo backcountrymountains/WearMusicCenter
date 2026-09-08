@@ -10,6 +10,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.service.notification.NotificationListenerService
+import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
@@ -19,7 +21,13 @@ import com.matejdro.wearmusiccenter.R
 import com.matejdro.wearmusiccenter.common.CommPaths
 import com.matejdro.wearmusiccenter.common.MiscPreferences
 import com.matejdro.wearmusiccenter.common.model.AutoStartMode
+import com.matejdro.wearmusiccenter.config.SettingsBackup
 import com.matejdro.wearmusiccenter.util.launchWithPlayServicesErrorHandling
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import timber.log.Timber
+import kotlin.system.exitProcess
 import com.matejdro.wearutils.logging.LogRetrievalTask
 import com.matejdro.wearutils.preferences.compat.PreferenceFragmentCompatEx
 import com.matejdro.wearutils.preferences.definition.Preferences
@@ -32,12 +40,109 @@ class MiscSettingsFragment : PreferenceFragmentCompatEx(), SharedPreferences.OnS
         private const val VIBRATION_CENTER_PACKAGE = "com.matejdro.wearvibrationcenter"
     }
 
+    private val backupFileLauncher =
+            registerForActivityResult(ActivityResultContracts.CreateDocument(SettingsBackup.MIME_TYPE)) { uri ->
+                uri?.let { performBackup(it) }
+            }
+
+    private val restoreFileLauncher =
+            registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                uri?.let { confirmRestore(it) }
+            }
+
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.settings)
 
         initAutomationSection()
         initNotificationsSection()
+        initBackupSection()
         initAboutSection()
+    }
+
+    private fun initBackupSection() {
+        findPreference<Preference>("backup_settings")!!.onPreferenceClickListener =
+                Preference.OnPreferenceClickListener {
+                    backupFileLauncher.launch(SettingsBackup.DEFAULT_FILE_NAME)
+                    true
+                }
+
+        findPreference<Preference>("restore_settings")!!.onPreferenceClickListener =
+                Preference.OnPreferenceClickListener {
+                    // Some file pickers will not offer a zip under the strict mime
+                    // type, so accept anything and let the reader reject it.
+                    restoreFileLauncher.launch(arrayOf("*/*"))
+                    true
+                }
+    }
+
+    private fun performBackup(uri: Uri) {
+        val appContext = requireContext().applicationContext
+
+        lifecycleScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                try {
+                    val stream = appContext.contentResolver.openOutputStream(uri, "wt")
+                            ?: return@withContext "Could not open the destination file"
+                    stream.use { SettingsBackup.exportTo(appContext, it) }
+                    null
+                } catch (e: Exception) {
+                    Timber.w(e, "Settings backup failed (%s)", e.javaClass.simpleName)
+                    e.message ?: e.javaClass.simpleName
+                }
+            }
+
+            val message = if (error == null) {
+                getString(R.string.backup_success)
+            } else {
+                getString(R.string.backup_failed, error)
+            }
+            Toast.makeText(appContext, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun confirmRestore(uri: Uri) {
+        AlertDialog.Builder(requireContext())
+                .setTitle(R.string.restore_confirm_title)
+                .setMessage(R.string.restore_confirm_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok) { _, _ -> performRestore(uri) }
+                .show()
+    }
+
+    private fun performRestore(uri: Uri) {
+        val appContext = requireContext().applicationContext
+
+        lifecycleScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                try {
+                    val stream = appContext.contentResolver.openInputStream(uri)
+                            ?: return@withContext "Could not open the backup file"
+                    stream.use { SettingsBackup.restoreFrom(appContext, it) }
+                    null
+                } catch (e: Exception) {
+                    Timber.w(e, "Settings restore failed (%s)", e.javaClass.simpleName)
+                    e.message ?: e.javaClass.simpleName
+                }
+            }
+
+            if (error != null) {
+                Toast.makeText(appContext, getString(R.string.restore_failed, error), Toast.LENGTH_LONG).show()
+                return@launch
+            }
+
+            AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.restore_success_title)
+                    .setMessage(R.string.restore_success_message)
+                    .setCancelable(false)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        requireActivity().finishAffinity()
+                        // SharedPreferences are cached in memory and would be written
+                        // straight back over the restored files, so the process has to
+                        // go away before they are read again.
+                        exitProcess(0)
+                    }
+                    .show()
+        }
     }
 
     private fun initAutomationSection() {

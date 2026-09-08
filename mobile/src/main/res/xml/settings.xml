@@ -107,6 +107,19 @@
 
 
     <PreferenceCategory
+        android:key="cat_backup"
+        android:title="@string/setting_backup_category">
+        <Preference
+            android:key="backup_settings"
+            android:summary="@string/setting_backup_description"
+            android:title="@string/setting_backup" />
+        <Preference
+            android:key="restore_settings"
+            android:summary="@string/setting_restore_description"
+            android:title="@string/setting_restore" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
         android:key="cat_about"
         android:title="@string/category_about">
         <Preference
