@@ -59,6 +59,7 @@ dependencies {
     implementation project(path: ':wearutils')
     implementation project(path: ':common')
 
+    implementation libs.androidx.media
     implementation libs.androidx.preference
     implementation libs.androidx.appCompat
     implementation libs.google.material

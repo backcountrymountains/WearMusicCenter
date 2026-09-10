@@ -20,6 +20,12 @@
         <intent>
             <action android:name="android.intent.action.MEDIA_BUTTON" />
         </intent>
+
+        <!-- Needed to resolve and bind the playing app's browse tree, which is
+             where a real queue lives. MediaController.queue is usually empty. -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
     </queries>
 
     <application

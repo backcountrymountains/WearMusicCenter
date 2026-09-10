@@ -447,6 +447,14 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
                         customListItemAction.entryId.toLong()
                 )
             }
+            CustomLists.BROWSED_QUEUE -> {
+                // Entry ids here are the other app's media ids, not queue positions.
+                Timber.d("Playing browsed media id %s", customListItemAction.entryId)
+                currentMediaController?.transportControls?.playFromMediaId(
+                        customListItemAction.entryId,
+                        null
+                )
+            }
             CustomLists.PLAYBACK_SPEED -> {
                 // setPlaybackSpeed is API 29+; below that there is no session API for it.
                 if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
