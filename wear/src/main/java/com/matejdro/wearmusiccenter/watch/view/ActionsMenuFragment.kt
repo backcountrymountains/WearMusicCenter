@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.os.Bundle
 import android.support.wearable.input.WearableButtons
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -23,6 +24,7 @@ import androidx.wear.widget.WearableLinearLayoutManager
 import androidx.wear.widget.WearableRecyclerView
 import com.google.android.wearable.input.RotaryEncoderHelper
 import com.matejdro.wearmusiccenter.R
+import com.matejdro.wearmusiccenter.common.CustomLists
 import com.matejdro.wearmusiccenter.common.MiscPreferences
 import com.matejdro.wearmusiccenter.watch.communication.CustomListWithBitmaps
 import com.matejdro.wearmusiccenter.watch.communication.WatchInfoSender
@@ -31,6 +33,30 @@ import com.matejdro.wearutils.preferences.definition.Preferences
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.abs
 
+
+/**
+ * How visible an off-centre list item is. Kept well below the centred item's 1f so
+ * white episode titles above and below do not compete with the selected one.
+ */
+private const val BACKGROUND_ITEM_ALPHA = 0.15f
+
+/**
+ * How large an off-centre row draws. Shrinking it is what actually stops long
+ * episode titles from crowding the selected row; alpha alone left them overlapping.
+ */
+private const val BACKGROUND_ITEM_SCALE = 0.7f
+
+/**
+ * How far from the centre, as a fraction of the list height, a row has to travel to
+ * reach full background dimming. Larger means a gentler ramp between the two states.
+ */
+private const val FOCUS_FALLOFF = 0.3f
+
+/** Matches `textSize` in `item_list_action.xml`; both layout variants use it. */
+private const val DEFAULT_LIST_TEXT_SIZE_SP = 18f
+
+/** The speed list holds entries like "1.4x", so it gets the roomier size. */
+private const val SPEED_LIST_TEXT_SIZE_SP = 28f
 
 @SuppressLint("NotifyDataSetChanged")
 @AndroidEntryPoint
@@ -180,6 +206,18 @@ class ActionsMenuFragment : Fragment() {
         }
     }
 
+    /**
+     * The speed list is short, icon-less entries like "1.4x", so it gets bigger text
+     * packed tighter. Episode titles need the smaller, roomier default.
+     */
+    private fun styleRow(holder: MenuItemViewHolder, listId: String?) {
+        if (listId == CustomLists.PLAYBACK_SPEED) {
+            holder.applyStyle(SPEED_LIST_TEXT_SIZE_SP, compact = true)
+        } else {
+            holder.applyStyle(DEFAULT_LIST_TEXT_SIZE_SP, compact = false)
+        }
+    }
+
     inner class MenuAdapter : RecyclerView.Adapter<MenuItemViewHolder>() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MenuItemViewHolder {
             val view = LayoutInflater.from(context).inflate(R.layout.item_list_action, parent, false)
@@ -193,6 +231,7 @@ class ActionsMenuFragment : Fragment() {
 
                 holder.icon.setImageBitmap(customItem.icon)
                 holder.title.text = customItem.listItem.entryTitle
+                styleRow(holder, customMenuItems.listId)
 
                 val clickListener = if (alwaysPickCenter) null else holder
                 holder.itemView.setOnClickListener(clickListener)
@@ -202,6 +241,9 @@ class ActionsMenuFragment : Fragment() {
 
                 holder.icon.setImageDrawable(configItem.icon)
                 holder.title.text = configItem.title
+                // Rows are recycled between lists, so reset rather than inherit
+                // whatever styling the previous list asked for.
+                styleRow(holder, null)
 
                 val clickListener = if (alwaysPickCenter) null else holder
                 holder.itemView.setOnClickListener(clickListener)
@@ -219,8 +261,22 @@ class ActionsMenuFragment : Fragment() {
         val icon: ImageView = itemView.findViewById(R.id.icon)
         val title: TextView = itemView.findViewById(R.id.text)
 
+        /** The roomy row height from the layout, kept so compact rows can restore it. */
+        private val defaultTitleMinHeight: Int = title.minHeight
+
         init {
             itemView.tag = this
+        }
+
+        /**
+         * [compact] strips the row down to just its text: no icon gutter and no
+         * minimum height. Entries like "1.4x" then sit as close together as the
+         * text itself allows.
+         */
+        fun applyStyle(textSizeSp: Float, compact: Boolean) {
+            title.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
+            title.minHeight = if (compact) 0 else defaultTitleMinHeight
+            icon.visibility = if (compact) View.GONE else View.VISIBLE
         }
 
         override fun onClick(v: View?) {
@@ -242,6 +298,26 @@ class ActionsMenuFragment : Fragment() {
             return closestChildViewHolder.bindingAdapterPosition
         }
 
+        /**
+         * 1 for a row sitting at the centre of the list, easing to 0 by
+         * [FOCUS_FALLOFF] of the list height away from it.
+         *
+         * Derived from the row's current position on every pass rather than cached,
+         * so it cannot drift out of step with what is on screen.
+         */
+        private fun focusFactor(child: View): Float {
+            if (height == 0) return 0f
+
+            val centerOffset = child.height.toFloat() / 2f / height.toFloat()
+            val yRelativeToCenter = child.y / height + centerOffset
+            val distance = abs(0.5f - yRelativeToCenter)
+
+            return (1f - distance / FOCUS_FALLOFF).coerceIn(0f, 1f)
+        }
+
+        private fun lerp(from: Float, to: Float, fraction: Float): Float =
+                from + (to - from) * fraction
+
         private fun prepareChildrenLayout() {
             closestDistToCenter = Float.MAX_VALUE
             closestChildViewHolder = null
@@ -252,19 +328,23 @@ class ActionsMenuFragment : Fragment() {
                 val child = getChildAt(childIndex)
                 val holder = child!!.tag as MenuItemViewHolder
 
-                val textScale: Float
-                val imageScale: Float
-                if (holder == closestChildViewHolder) {
-                    textScale = 1f
-                    imageScale = 1f
-                } else {
-                    textScale = 0.5f
-                    imageScale = 0.75f
-                }
+                // Continuous, so a row fades and grows as it travels towards the
+                // centre instead of snapping the moment it becomes the closest one.
+                val focus = focusFactor(child)
 
-                child.alpha = textScale
+                val itemScale = lerp(BACKGROUND_ITEM_SCALE, 1f, focus)
+
+                child.alpha = lerp(BACKGROUND_ITEM_ALPHA, 1f, focus)
+                // Anchored right when unfocused so it shrinks away from the selected
+                // row, sliding to a left anchor as it takes focus.
+                child.pivotX = child.width * (1f - focus)
+                // Scale is absolute, so unlike a translation it cannot accumulate
+                // across layout passes.
+                child.scaleX = itemScale
+                child.scaleY = itemScale
 
                 if (roundScreen) {
+                    val imageScale = lerp(0.75f, 1f, focus)
                     holder.icon.scaleX = imageScale
                     holder.icon.scaleY = imageScale
                 }

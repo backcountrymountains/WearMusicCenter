@@ -32,7 +32,7 @@
         android:maxWidth="150dp"
         android:minHeight="?android:attr/listPreferredItemHeightSmall"
         android:textColor="@color/white"
-        android:textSize="20sp"
+        android:textSize="18sp"
         android:maxLines="2"
         android:ellipsize="end"
         tools:text="Start Playback" />
