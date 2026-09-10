@@ -135,9 +135,12 @@ class NotificationService : NotificationListenerService() {
     }
 
     private val mediaObserver = Observer<Resource<MediaController>?> {
-        Timber.d("Playback update %b %s", MusicService.active, it?.data?.playbackState?.state)
+        Timber.d("Playback update active=%b live=%b %s", MusicService.active,
+                MusicService.hasLiveWatchSession(), it?.data?.playbackState?.state)
 
-        if (!MusicService.active && it?.data?.playbackState?.isPlaying() == true) {
+        // Gate on a *live* session, not on `active`. A silently killed watch app
+        // leaves `active` true forever, which used to suppress auto-start for good.
+        if (!MusicService.hasLiveWatchSession() && it?.data?.playbackState?.isPlaying() == true) {
             val autoStartBlacklist = Preferences.getStringSet(preferences, MiscPreferences.AUTO_START_APP_BLACKLIST)
             if (!autoStartBlacklist.contains(it.data?.packageName)) {
                 startAppOnWatch()

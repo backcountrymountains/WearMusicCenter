@@ -19,6 +19,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Message
+import android.os.SystemClock
 import android.preference.PreferenceManager
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -81,8 +82,34 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
         private const val NOTIFICATION_ID_PERSISTENT = 1
         private const val NOTIFICATION_ID_SERVICE_ERROR = 2
 
+        // How long the phone keeps believing a watch session is live after the last
+        // message from the watch. See hasLiveWatchSession().
+        private val WATCH_SESSION_STALE_MS = TimeUnit.SECONDS.toMillis(60)
+
         var active = false
             private set
+
+        @Volatile
+        private var lastWatchContactElapsedMs = 0L
+
+        /**
+         * True only if this service is running AND the watch has been heard from
+         * recently.
+         *
+         * [active] alone is not a safe proxy for "the watch UI is open": it clears
+         * only in onDestroy, and the service's only routine stop is the watch's own
+         * MESSAGE_WATCH_CLOSED. A watch app killed silently — Samsung's Freecess
+         * freezer, a crash, a force-stop — never sends that, so [active] stays true
+         * forever and anything gated on it (notably auto-start) is suppressed for
+         * good. Freshness of contact is the honest signal.
+         */
+        fun hasLiveWatchSession(): Boolean =
+                active &&
+                        SystemClock.elapsedRealtime() - lastWatchContactElapsedMs < WATCH_SESSION_STALE_MS
+
+        private fun recordWatchContact() {
+            lastWatchContactElapsedMs = SystemClock.elapsedRealtime()
+        }
     }
 
     private lateinit var messageClient: MessageClient
@@ -164,6 +191,8 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
         startForeground(NOTIFICATION_ID_PERSISTENT, notificationBuilder.build())
 
         active = true
+        // The watch is what starts this service, so its start counts as contact.
+        recordWatchContact()
         Timber.d("Service started")
     }
 
@@ -427,6 +456,7 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
 
     override fun onMessageReceived(event: MessageEvent) {
         Timber.d("Message %s", event.path)
+        recordWatchContact()
 
         when (event.path) {
             CommPaths.MESSAGE_WATCH_CLOSED -> {
