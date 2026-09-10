@@ -14,6 +14,7 @@ import com.matejdro.wearmusiccenter.common.CustomLists
 import com.matejdro.wearmusiccenter.music.MusicService
 import com.matejdro.wearmusiccenter.proto.CustomList
 import kotlinx.coroutines.tasks.await
+import timber.log.Timber
 import java.text.DecimalFormat
 import javax.inject.Inject
 import kotlin.math.abs
@@ -64,11 +65,23 @@ class PlaybackSpeedAction : SelectableAction {
 
             putDataRequest.data = protoData.toByteArray()
 
+            // Without this the item syncs opportunistically and the watch can wait
+            // minutes for a list it asked for a moment ago.
+            putDataRequest.setUrgent()
+
             Wearable.getDataClient(service).putDataItem(putDataRequest).await()
+            Timber.d("Speed: list delivered to the data layer")
         }
     }
 }
 
-private val SPEEDS = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f)
+/**
+ * 1.0x to 2.1x in 0.1 steps — starts at normal speed so playback can always be put
+ * back. Written out rather than generated so no float accumulates.
+ */
+private val SPEEDS = listOf(
+        1.0f, 1.1f, 1.2f, 1.3f, 1.4f, 1.5f,
+        1.6f, 1.7f, 1.8f, 1.9f, 2.0f, 2.1f
+)
 private val SPEED_FORMAT = DecimalFormat("0.0#")
 private const val SPEED_MATCH_TOLERANCE = 0.01f

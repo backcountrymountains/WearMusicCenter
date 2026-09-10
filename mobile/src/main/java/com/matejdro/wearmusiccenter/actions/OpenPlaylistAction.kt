@@ -20,6 +20,9 @@ import kotlinx.coroutines.tasks.await
 import timber.log.Timber
 import javax.inject.Inject
 
+/** Keeps the show name to roughly one line of the watch's 150dp-wide list item. */
+private const val SHOW_NAME_MAX_CHARS = 22
+
 class OpenPlaylistAction : SelectableAction {
     constructor(context: Context) : super(context)
     constructor(context: Context, bundle: PersistableBundle) : super(context, bundle)
@@ -44,7 +47,7 @@ class OpenPlaylistAction : SelectableAction {
                 sendList(browsedQueue.take(20).map { item ->
                     CustomList.ListEntry.newBuilder()
                             .setEntryId(item.mediaId ?: "")
-                            .setEntryTitle(item.description.title?.toString() ?: "")
+                            .setEntryTitle(entryLabel(item))
                             .build()
                 }, CustomLists.BROWSED_QUEUE)
                 return
@@ -101,7 +104,45 @@ class OpenPlaylistAction : SelectableAction {
 
             putDataRequest.data = protoData.toByteArray()
 
+            // Without this the item syncs opportunistically and the watch can wait
+            // minutes for a list it asked for a moment ago.
+            putDataRequest.setUrgent()
+
             Wearable.getDataClient(service).putDataItem(putDataRequest).await()
+            Timber.d("Playlist: session-queue list delivered to the data layer")
+        }
+
+        /**
+         * "Episode title" on line one, the show it belongs to on line two.
+         *
+         * The watch's round list item has no `maxLines`, so a second line renders
+         * fine; the show name is shortened because the text view is only 150dp wide.
+         * Falls back to the bare episode title when the app exposes no show name,
+         * or repeats the episode title in it.
+         */
+        private fun entryLabel(item: MediaBrowserCompat.MediaItem): String {
+            val episode = item.description.title?.toString()?.trim().orEmpty()
+
+            val show = sequenceOf(item.description.subtitle, item.description.description)
+                    .mapNotNull { it?.toString()?.trim() }
+                    .firstOrNull { it.isNotEmpty() && !it.equals(episode, ignoreCase = true) }
+                    ?: return episode
+
+            return "$episode\n${shorten(show)}"
+        }
+
+        /** Trims a show name to [SHOW_NAME_MAX_CHARS], preferring a word boundary. */
+        private fun shorten(name: String): String {
+            if (name.length <= SHOW_NAME_MAX_CHARS) return name
+
+            val clipped = name.take(SHOW_NAME_MAX_CHARS)
+            val lastSpace = clipped.lastIndexOf(' ')
+            val stem = if (lastSpace >= SHOW_NAME_MAX_CHARS / 2) {
+                clipped.substring(0, lastSpace)
+            } else {
+                clipped
+            }
+            return stem.trimEnd(' ', ',', '-', ':') + "…"
         }
 
         /**
@@ -136,8 +177,10 @@ class OpenPlaylistAction : SelectableAction {
                     .build()
 
             putDataRequest.data = protoData.toByteArray()
+            putDataRequest.setUrgent()
 
             Wearable.getDataClient(service).putDataItem(putDataRequest).await()
+            Timber.d("Playlist: list '%s' delivered to the data layer", listId)
         }
     }
 }

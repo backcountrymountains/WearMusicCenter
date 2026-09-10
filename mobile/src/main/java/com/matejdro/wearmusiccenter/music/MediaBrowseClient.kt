@@ -107,6 +107,11 @@ class MediaBrowseClient(private val context: Context) {
                     val queueItems = loadChildren(browser, queueNode.mediaId!!)
                     Timber.d("browse: queue node '%s' yielded %d items",
                             queueNode.mediaId, queueItems.size)
+                    queueItems.forEach {
+                        Timber.d("browse:   item title='%s' subtitle='%s' description='%s'",
+                                it.description.title, it.description.subtitle,
+                                it.description.description)
+                    }
 
                     queueItems
                 } finally {
