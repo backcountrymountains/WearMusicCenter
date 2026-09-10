@@ -19,7 +19,8 @@ class PlaybackActionList : PhoneAction {
                 SkipToPrevAction(context),
                 SkipToNextAction(context),
                 SkipThirtySecondsAction(context),
-                ReverseThirtySecondsAction(context)
+                ReverseThirtySecondsAction(context),
+                PlaybackSpeedAction(context)
         ))
     }
 

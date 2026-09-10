@@ -6,6 +6,7 @@ import com.matejdro.wearmusiccenter.actions.OpenPlaylistAction
 import com.matejdro.wearmusiccenter.actions.appplay.AppPlayAction
 import com.matejdro.wearmusiccenter.actions.playback.PauseAction
 import com.matejdro.wearmusiccenter.actions.playback.PlayAction
+import com.matejdro.wearmusiccenter.actions.playback.PlaybackSpeedAction
 import com.matejdro.wearmusiccenter.actions.playback.ReverseThirtySecondsAction
 import com.matejdro.wearmusiccenter.actions.playback.SkipThirtySecondsAction
 import com.matejdro.wearmusiccenter.actions.playback.SkipToNextAction
@@ -66,5 +67,10 @@ abstract class ActionHandlersModule {
     @Binds
     @IntoMap
     @ClassKey(OpenPlaylistAction::class)
-    abstract fun bindOpenPlaylistActionsHandler(handler: NullAction.Handler): ActionHandler<*>
+    abstract fun bindOpenPlaylistActionsHandler(handler: OpenPlaylistAction.Handler): ActionHandler<*>
+
+    @Binds
+    @IntoMap
+    @ClassKey(PlaybackSpeedAction::class)
+    abstract fun bindPlaybackSpeedActionsHandler(handler: PlaybackSpeedAction.Handler): ActionHandler<*>
 }

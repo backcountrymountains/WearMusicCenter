@@ -447,6 +447,22 @@ class MusicService : LifecycleService(), MessageClient.OnMessageReceivedListener
                         customListItemAction.entryId.toLong()
                 )
             }
+            CustomLists.PLAYBACK_SPEED -> {
+                // setPlaybackSpeed is API 29+; below that there is no session API for it.
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    Timber.w("Playback speed needs Android 10; ignoring")
+                    return
+                }
+
+                val speed = customListItemAction.entryId.toFloatOrNull()
+                if (speed == null) {
+                    Timber.w("Bad playback speed entry %s", customListItemAction.entryId)
+                    return
+                }
+
+                Timber.d("Setting playback speed to %s", speed)
+                currentMediaController?.transportControls?.setPlaybackSpeed(speed)
+            }
         }
     }
 

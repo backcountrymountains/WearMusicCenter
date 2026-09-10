@@ -8,6 +8,7 @@
     <string name="action_skip_prev">Skip prev</string>
     <string name="action_skip_next">Skip next</string>
     <string name="action_skip_seconds">Skip %1$d seconds</string>
+    <string name="action_playback_speed">Playback speed</string>
     <string name="action_reverse_seconds">Reverse for %1$d seconds</string>
     <string name="group_playback_controls">Playback controls</string>
     <string name="pick_action">Pick action</string>
