@@ -209,6 +209,37 @@ class MainActivity : WearCompanionWatchActivity(),
         binding.ambientClock.text = timeFormat.format(java.util.Date())
     }
 
+    /**
+     * Shows or hides the low-power screen.
+     *
+     * <p>It is opaque and match_parent, so showing it is all that is needed to
+     * hide the interactive UI - there is no per-view visibility juggling, and
+     * nothing to get out of step when a new view is added to the main layout.
+     */
+    private fun showAmbientScreen(show: Boolean) {
+        binding.ambientScreen.root.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) {
+            updateAmbientScreen()
+        }
+    }
+
+    /**
+     * Repaints the low-power screen from the current time and music state.
+     *
+     * <p>Called on entering ambient and once per [onUpdateAmbient], which the
+     * platform delivers about once a minute - the same cadence the clock needs,
+     * so the track text comes along for free.
+     */
+    private fun updateAmbientScreen() {
+        binding.ambientScreen.ambientTime.text = timeFormat.format(java.util.Date())
+        // Read straight off the views the interactive screen already maintains,
+        // rather than re-deriving from musicState. Those two have diverged in
+        // the past (the "Playback Stopped" resync bug) and this way the ambient
+        // screen cannot disagree with what was last shown.
+        binding.ambientScreen.ambientTitle.text = binding.textTitle.text
+        binding.ambientScreen.ambientArtist.text = binding.textArtist.text
+    }
+
     private val musicStateObserver = Observer<Resource<MusicState>?> {
         Timber.d("GUI Music State %s %s", it?.status, it?.data)
         if (it == null || it.status == Resource.Status.LOADING) {
@@ -445,45 +476,43 @@ class MainActivity : WearCompanionWatchActivity(),
                             ambientDetails.burnInProtectionRequired,
                             ambientDetails.deviceHasLowBitAmbient)
                     stemButtonsManager.onEnterAmbient()
-                    binding.ambientClock.visibility = View.VISIBLE
 
                     handler.removeMessages(MESSAGE_UPDATE_CLOCK)
-                    updateClock()
                     hideNotificationIfOverdue()
 
-                    binding.iconTop.visibility = View.GONE
-                    binding.iconBottom.visibility = View.GONE
-                    binding.iconLeft.visibility = View.GONE
-                    binding.iconRight.visibility = View.GONE
-
-                    binding.albumArt.visibility = View.GONE
-                    binding.volumeBar.visibility = View.GONE
-                    binding.loadingIndicator.visibility = View.GONE
-
-                    binding.root.background = ColorDrawable(Color.BLACK)
+                    // The ambient screen is opaque and match_parent, so it hides
+                    // the interactive UI by covering it. The only things still
+                    // switched off by hand are the ones that draw ABOVE it or
+                    // outside it: the notification popup's artwork, and the
+                    // drawer.
+                    showAmbientScreen(true)
 
                     binding.notificationPopup.backgroundImage.visibility = View.GONE
                     binding.notificationPopup.solidBackground.background = ColorDrawable(Color.BLACK)
-
-                    binding.textArtist.displayTextOutline = true
-                    binding.textTitle.displayTextOutline = true
 
                     binding.actionDrawer.controller.closeDrawer()
                 }
 
                 override fun onUpdateAmbient() {
                     Timber.d("ambient: update")
-                    updateClock()
+                    updateAmbientScreen()
                     viewModel.updateTimers()
                     hideNotificationIfOverdue()
 
-                    binding.drawerLayout.translationX = Random.nextInt(-5, 6).toFloat()
-                    binding.drawerLayout.translationY = Random.nextInt(-5, 6).toFloat()
+                    // Burn-in drift. Applied to the ambient screen itself rather
+                    // than to drawerLayout, which is what the interactive UI is
+                    // reset on - drifting one view and resetting another left the
+                    // whole interactive layout permanently offset by up to 5px
+                    // after the first ambient period.
+                    binding.ambientScreen.root.translationX = Random.nextInt(-5, 6).toFloat()
+                    binding.ambientScreen.root.translationY = Random.nextInt(-5, 6).toFloat()
                 }
 
                 override fun onExitAmbient() {
                     Timber.d("ambient: exit")
                     stemButtonsManager.onExitAmbient()
+
+                    showAmbientScreen(false)
 
                     if (Preferences.getBoolean(preferences, MiscPreferences.ALWAYS_SHOW_TIME)) {
                         handler.sendEmptyMessage(MESSAGE_UPDATE_CLOCK)
@@ -497,8 +526,6 @@ class MainActivity : WearCompanionWatchActivity(),
                     binding.iconRight.visibility = View.VISIBLE
 
                     binding.albumArt.visibility = View.VISIBLE
-
-                    binding.root.background = null
 
                     binding.notificationPopup.backgroundImage.visibility = View.VISIBLE
                     binding.notificationPopup.solidBackground.background =
@@ -517,11 +544,8 @@ class MainActivity : WearCompanionWatchActivity(),
                         rotatingInputDisabledUntil = System.currentTimeMillis() + crownDisableTime
                     }
 
-                    binding.textArtist.displayTextOutline = false
-                    binding.textTitle.displayTextOutline = false
-
-                    binding.root.translationX = 0f
-                    binding.root.translationY = 0f
+                    binding.ambientScreen.root.translationX = 0f
+                    binding.ambientScreen.root.translationY = 0f
                 }
 
             }

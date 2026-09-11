@@ -138,6 +138,15 @@
             android:indeterminate="true"
             android:visibility="gone" />
 
+        <!--
+            The low-power screen. Deliberately placed here: after the
+            interactive content, so it covers it, but BEFORE the notification
+            popup, so a notification still draws on top while in ambient.
+        -->
+        <include
+            android:id="@+id/ambient_screen"
+            layout="@layout/ambient_screen" />
+
         <include
             android:id="@+id/notification_popup"
             layout="@layout/popup_notification" />

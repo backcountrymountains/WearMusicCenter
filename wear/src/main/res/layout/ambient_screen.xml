@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The low-power screen. A separate layout rather than a re-dressing of the
+    interactive one, because the two want opposite things: the interactive
+    screen wants album art, four touch icons and a drawer, and this one wants
+    as few lit pixels as possible arranged to be readable at a glance.
+
+    It covers the interactive UI completely - solid black, match_parent - so
+    nothing below it needs hiding view by view. It sits BEFORE the notification
+    popup in activity_main.xml, so notifications still draw on top in ambient.
+
+    Type is drawn FILLED, not as the 1dp outline the interactive text switches
+    to in ambient. That outline exists for low-bit ambient displays; this watch
+    reports lowBit=false in onEnterAmbient, so it has full colour depth and the
+    outline was throwing away antialiasing for nothing - hollow, thin letters
+    that are hard to read.
+
+    Colours are greys, not white, on purpose. The panel is AMOLED, so luminance
+    is current: a dimmer glyph costs less and ages the pixel less, and in the
+    dark there is no legibility to gain from white. The hierarchy - time
+    brightest, then title, then artist - is carried by brightness as much as by
+    size, which is free here.
+
+    Burn-in protection is the caller's job: onUpdateAmbient drifts this whole
+    view, and the platform confirms it wants that (burnInProtectionRequired=true).
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/ambient_screen_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:visibility="gone"
+    tools:visibility="visible">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingLeft="26dp"
+        android:paddingRight="26dp">
+
+        <TextView
+            android:id="@+id/ambient_time"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-light"
+            android:includeFontPadding="false"
+            android:letterSpacing="0.02"
+            android:textColor="#D0D0D0"
+            android:textSize="38sp"
+            tools:text="10:42" />
+
+        <!--
+            maxLines 2 and ellipsize: a wrapped podcast title is common and a
+            third line would push the artist off a round screen.
+        -->
+        <TextView
+            android:id="@+id/ambient_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:ellipsize="end"
+            android:gravity="center_horizontal"
+            android:maxLines="2"
+            android:textColor="#9E9E9E"
+            android:textSize="16sp"
+            tools:text="A Long Episode Title That Wraps" />
+
+        <TextView
+            android:id="@+id/ambient_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:gravity="center_horizontal"
+            android:maxLines="1"
+            android:textColor="#6B6B6B"
+            android:textSize="13sp"
+            tools:text="Podcast Name" />
+
+    </LinearLayout>
+
+</FrameLayout>
