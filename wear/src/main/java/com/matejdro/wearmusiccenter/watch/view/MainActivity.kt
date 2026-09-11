@@ -28,7 +28,7 @@ import androidx.lifecycle.coroutineScope
 import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
-import androidx.wear.ambient.AmbientModeSupport
+import androidx.wear.ambient.AmbientLifecycleObserver
 import androidx.wear.widget.drawer.WearableDrawerLayout
 import androidx.wear.widget.drawer.WearableDrawerView
 import com.google.android.gms.common.GoogleApiAvailability
@@ -64,8 +64,7 @@ import kotlin.random.Random
 
 @AndroidEntryPoint
 class MainActivity : WearCompanionWatchActivity(),
-        FourWayTouchLayout.UserActionListener,
-        AmbientModeSupport.AmbientCallbackProvider {
+        FourWayTouchLayout.UserActionListener {
 
     companion object {
         private const val MESSAGE_HIDE_VOLUME = 10
@@ -80,7 +79,7 @@ class MainActivity : WearCompanionWatchActivity(),
     private lateinit var drawerContentContainer: View
     private lateinit var actionsMenuFragment: ActionsMenuFragment
     private lateinit var vibrator: Vibrator
-    private lateinit var ambientController: AmbientModeSupport.AmbientController
+    private lateinit var ambientObserver: AmbientLifecycleObserver
     private lateinit var stemButtonsManager: StemButtonsManager
     private val handler = TimeoutsHandler(WeakReference(this))
 
@@ -123,7 +122,16 @@ class MainActivity : WearCompanionWatchActivity(),
         timeFormat = android.text.format.DateFormat.getTimeFormat(this)
 
         preferences = PreferenceManager.getDefaultSharedPreferences(this)
-        ambientController = AmbientModeSupport.attach(this)
+        // AmbientLifecycleObserver, not the deprecated AmbientModeSupport.
+        // Measured on the Galaxy Watch Ultra (Wear OS 6): with AmbientModeSupport
+        // the screen went interactive -> off and the ambient callbacks never ran.
+        // Over a 20h battery window the watch logged 43 SECONDS of non-interactive
+        // screen-on in total, and a controlled test added 2m13s of screen-on of
+        // which 2m13s was interactive. The Timber lines below are how we tell
+        // whether this API does any better - if onEnterAmbient never appears in
+        // the log, the platform is not offering ambient to this app at all.
+        ambientObserver = AmbientLifecycleObserver(this, ambientCallback)
+        lifecycle.addObserver(ambientObserver)
         vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
 
         viewModel.albumArt.observe(this, albumArtObserver)
@@ -288,7 +296,7 @@ class MainActivity : WearCompanionWatchActivity(),
                 MiscPreferences.DISABLE_PHYSICAL_DOUBLE_CLICK_IN_AMBIENT
         )
 
-        if (!ambientController.isAmbient) {
+        if (!ambientObserver.isAmbient) {
             val alwaysDisplayClock =
                     Preferences.getBoolean(preferences, MiscPreferences.ALWAYS_SHOW_TIME)
 
@@ -428,9 +436,14 @@ class MainActivity : WearCompanionWatchActivity(),
         actionsMenuFragment.refreshMenu(type)
     }
 
-    override fun getAmbientCallback(): AmbientModeSupport.AmbientCallback =
-            object : AmbientModeSupport.AmbientCallback() {
-                override fun onEnterAmbient(ambientDetails: Bundle?) {
+    private val ambientCallback =
+            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+                override fun onEnterAmbient(
+                        ambientDetails: AmbientLifecycleObserver.AmbientDetails
+                ) {
+                    Timber.d("ambient: enter (burnInProtectionRequired=%b lowBit=%b)",
+                            ambientDetails.burnInProtectionRequired,
+                            ambientDetails.deviceHasLowBitAmbient)
                     stemButtonsManager.onEnterAmbient()
                     binding.ambientClock.visibility = View.VISIBLE
 
@@ -459,6 +472,7 @@ class MainActivity : WearCompanionWatchActivity(),
                 }
 
                 override fun onUpdateAmbient() {
+                    Timber.d("ambient: update")
                     updateClock()
                     viewModel.updateTimers()
                     hideNotificationIfOverdue()
@@ -468,6 +482,7 @@ class MainActivity : WearCompanionWatchActivity(),
                 }
 
                 override fun onExitAmbient() {
+                    Timber.d("ambient: exit")
                     stemButtonsManager.onExitAmbient()
 
                     if (Preferences.getBoolean(preferences, MiscPreferences.ALWAYS_SHOW_TIME)) {
@@ -686,7 +701,7 @@ class MainActivity : WearCompanionWatchActivity(),
 
                     activity.updateClock()
 
-                    if (!activity.ambientController.isAmbient &&
+                    if (!activity.ambientObserver.isAmbient &&
                             Preferences.getBoolean(
                                     activity.preferences,
                                     MiscPreferences.ALWAYS_SHOW_TIME
