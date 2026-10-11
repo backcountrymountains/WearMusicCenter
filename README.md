@@ -3,12 +3,20 @@ Music Center for Wear
 
 Application for customizable music control from Android Wear devices with support for additional watch's buttons and digital crown.
 
+This is a maintained fork of [matejdro/WearMusicCenter](https://github.com/matejdro/WearMusicCenter).
+It fixes the watch getting stuck on "Playback Stopped", silent watch-app deaths,
+podcast queues (AntennaPod etc.) and always-on mode on Wear OS 5+, and adds a
+playback speed list and settings backup/restore.
+
+**Install: see [INSTALL.md](INSTALL.md)** (also covers moving over from the original app).
+
+The code changes in this fork were written by Claude (Anthropic's AI coding
+assistant), directed and tested on a Galaxy Watch Ultra by the maintainer. If you
+want your own AI agent to fix something, point it at [AGENTS.md](AGENTS.md).
+
 ## Installing
 
-App is not on the Play Store anymore, due to Google's constant annoying policies and takedowns without a way to get a good explanation.
-
-You can install the app by manually sideloading the apk from releases to your phone and to your watch. To make watch install easier, you can
-use [Wear Installer](https://www.xda-developers.com/wear-installer-sideload-wear-os-apps/).
+See [INSTALL.md](INSTALL.md).
 
 ## Building
 
