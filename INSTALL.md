@@ -30,7 +30,7 @@ This fork installs **next to** the original, so nothing is lost while you switch
 
 1. Install both new apps as above. Keep the old ones for now.
 2. Open the old phone app and the new one side by side, and copy your button
-   layouts and settings across. (Both are called *Music Center for Wear*; the new one is version 1.11+, see App info.)
+   layouts and settings across. (Old and new have the same name; the new one is version 1.11+, see App info.)
 3. Uninstall the old app from the phone **and** the watch.
 4. If a watch button was set to open the old app, set it again.
 5. New app: **Settings → Back up settings**. Next time you reinstall, use
