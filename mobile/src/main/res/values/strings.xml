@@ -51,7 +51,7 @@
     <string name="donate">Donate</string>
     <string name="donate_description">Buy me a Coke if you really like my app!</string>
     <string name="get_support">Get support</string>
-    <string name="get_support_description">Send application logs to the developer for the support</string>
+    <string name="get_support_description">Share application logs, e.g. to attach to a GitHub issue</string>
     <string name="licenses">Open source licenses</string>
     <string name="setting_always_show_time">Always show time</string>
     <string name="setting_always_show_time_off_description">Current time will only be displayed in ambient mode</string>

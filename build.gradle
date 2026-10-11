@@ -8,8 +8,6 @@ buildscript {
         classpath libs.android.gradle
         classpath libs.kotlin.gradle
         classpath libs.kotlinova.gradle
-        classpath libs.google.playServices.gradle
-        classpath libs.google.firebase.crashlytics.gradle
         classpath libs.versionsPlugin.gradle
         classpath libs.unmock.gradle
         classpath libs.androidx.hilt.gradle

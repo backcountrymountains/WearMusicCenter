@@ -61,11 +61,32 @@ object SettingsBackup {
                 "Not a Music Center backup"
             }
 
+            renameDefaultPreferences(stagedPrefs, context.packageName)
+
             replaceDirectory(stagedFiles, context.filesDir)
             replaceDirectory(stagedPrefs, sharedPrefsDir(context))
         } finally {
             staging.deleteRecursively()
         }
+    }
+
+    /**
+     * The default SharedPreferences file is named after the package, so a backup
+     * made under another application ID (e.g. the original
+     * com.matejdro.wearmusiccenter) would otherwise restore into a file this app
+     * never reads.
+     */
+    private fun renameDefaultPreferences(stagedPrefs: File, packageName: String) {
+        val suffix = "_preferences.xml"
+        val expected = File(stagedPrefs, packageName + suffix)
+        if (expected.exists()) {
+            return
+        }
+
+        val foreign = stagedPrefs.listFiles { file -> file.name.endsWith(suffix) }
+            ?.singleOrNull()
+            ?: return
+        check(foreign.renameTo(expected)) { "Could not rename ${foreign.name}" }
     }
 
     private fun sharedPrefsDir(context: Context): File =

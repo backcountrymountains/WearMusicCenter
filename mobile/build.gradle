@@ -2,18 +2,32 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply plugin: "kotlin-kapt"
 apply plugin: 'kotlin-android'
-apply plugin: 'com.google.gms.google-services'
-apply plugin: 'com.google.firebase.crashlytics'
+
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
 
 android {
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            release {
+                storeFile file(keystoreProperties["storeFile"])
+                storePassword keystoreProperties["storePassword"]
+                keyAlias keystoreProperties["keyAlias"]
+                keyPassword keystoreProperties["keyPassword"]
+            }
+        }
+    }
     defaultConfig {
-        applicationId "com.matejdro.wearmusiccenter"
+        applicationId "io.github.backcountrymountains.wearmusiccenter"
         namespace = "com.matejdro.wearmusiccenter"
         minSdkVersion 23
         targetSdkVersion 30
         compileSdk 36
-        versionCode 26
-        versionName "1.10"
+        versionCode 27
+        versionName "1.11"
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         wearAppUnbundled true
         multiDexEnabled true
@@ -23,6 +37,9 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     packagingOptions {
@@ -92,11 +109,6 @@ dependencies {
 
     implementation libs.advancedRecyclerView
     implementation libs.licensesDialog
-
-    implementation platform(libs.google.firebase.bom)
-
-    implementation libs.google.firebase.crashlytics
-    implementation libs.google.firebase.analytics
 
     testImplementation libs.junit4
 }

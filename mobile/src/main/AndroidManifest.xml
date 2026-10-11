@@ -90,7 +90,7 @@
             android:theme="@style/AppTheme.Dialog" />
 
         <provider
-            android:authorities="com.matejdro.wearmusiccenter.logs"
+            android:authorities="${applicationId}.logs"
             android:name="androidx.core.content.FileProvider"
             android:exported="false"
             android:grantUriPermissions="true">

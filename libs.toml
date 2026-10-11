@@ -22,10 +22,7 @@ desugarJdkLibs = "2.1.5"
 
 google-autoFactory = "1.0.1" # Do not update due to Jakarta issues
 google-autoValue = "1.10.1" # Do not update that due to minSdk compatibility
-google-firebase-bom = "34.6.0"
-google-firebase-crashlytics-gradle = "3.0.6"
 google-material = "1.13.0"
-google-playServices-gradle = "4.4.4"
 google-playServices-location = "21.3.0"
 google-playServices-wearable = "19.0.0"
 google-protobuf-gradle = "0.9.5"
@@ -73,14 +70,9 @@ desugarJdkLibs = { module = "com.android.tools:desugar_jdk_libs", version.ref = 
 google-autoFactory = { module = "com.google.auto.factory:auto-factory", version.ref = "google-autoFactory" }
 google-autoValue = { module = "com.google.auto.value:auto-value", version.ref = "google-autoValue" }
 google-autoValue-annotations = { module = "com.google.auto.value:auto-value-annotations", version.ref = "google-autoValue" }
-google-firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "google-firebase-bom" }
-google-firebase-crashlytics = { module = "com.google.firebase:firebase-crashlytics" }
-google-firebase-crashlytics-gradle = { module = "com.google.firebase:firebase-crashlytics-gradle", version.ref = "google-firebase-crashlytics-gradle" }
-google-firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
 google-material = { module = "com.google.android.material:material", version.ref = "google-material" }
 google-wearableSupport = { module = "com.google.android.support:wearable", version.ref = "google-wearableLibrary" }
 google-wearableLibrary = { module = "com.google.android.wearable:wearable", version.ref = "google-wearableLibrary" }
-google-playServices-gradle = { module = "com.google.gms:google-services", version.ref = "google-playServices-gradle" }
 google-playServices-location = { module = "com.google.android.gms:play-services-location", version.ref = "google-playServices-location" }
 google-protobuf-gradle = { module = "com.google.protobuf:protobuf-gradle-plugin", version.ref = "google-protobuf-gradle" }
 google-protobuf-liteGen = { module = "com.google.protobuf:protoc-gen-javalite", version.ref = "google-protobuf-liteGen" }

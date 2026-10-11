@@ -254,8 +254,8 @@ class MiscSettingsFragment : PreferenceFragmentCompatEx(), SharedPreferences.OnS
     private fun sendLogs() {
         LogRetrievalTask(activity,
                 CommPaths.MESSAGE_SEND_LOGS,
-                "apps@matejdro.com",
-                "com.matejdro.wearmusiccenter.logs").execute(null as Void?)
+                "",
+                "${requireContext().packageName}.logs").execute(null as Void?)
     }
 
     @Deprecated("Deprecated in Java")
