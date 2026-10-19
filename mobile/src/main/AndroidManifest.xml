@@ -26,6 +26,13 @@
         <intent>
             <action android:name="android.media.browse.MediaBrowserService" />
         </intent>
+
+        <!-- Lets the auto-start picker list launcher apps such as browsers, which
+             play media but have neither of the intents above. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application

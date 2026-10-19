@@ -25,7 +25,11 @@ object MiscPreferences {
 
     val AUTO_START_MODE: EnumPreferenceDefinition<AutoStartMode> = EnumPreferenceDefinition("auto_start_mode", AutoStartMode.OFF)
 
+    /** Legacy: unticked apps. Read only to migrate into [AUTO_START_APPS_ALLOWED]. */
     val AUTO_START_APP_BLACKLIST: PreferenceDefinition<Set<String>> = SimplePreferenceDefinition("auto_start_apps_blacklist", emptySet())
+
+    /** Apps allowed to auto-start. Absent means never configured: every app is allowed. */
+    val AUTO_START_APPS_ALLOWED: PreferenceDefinition<Set<String>> = SimplePreferenceDefinition("auto_start_apps_allowed", emptySet())
 
     val CLOSE_TIMEOUT: PreferenceDefinition<Int> = SimplePreferenceDefinition("close_timeout", 0)
 

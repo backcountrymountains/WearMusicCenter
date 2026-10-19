@@ -148,7 +148,7 @@ class MiscSettingsFragment : PreferenceFragmentCompatEx(), SharedPreferences.OnS
     private fun initAutomationSection() {
         migrateOldAutoStartSetting()
 
-        findPreference<Preference>("auto_start_apps_blacklist")?.isEnabled =
+        findPreference<Preference>("auto_start_apps_allowed")?.isEnabled =
                 Preferences.getEnum(preferenceManager.sharedPreferences, MiscPreferences.AUTO_START_MODE) != AutoStartMode.OFF
 
         findPreference<Preference>("auto_start_mode")!!.onPreferenceChangeListener =
@@ -157,7 +157,7 @@ class MiscSettingsFragment : PreferenceFragmentCompatEx(), SharedPreferences.OnS
 
                     val mode = enumValueOf<AutoStartMode>(newValue)
 
-                    findPreference<Preference>("auto_start_apps_blacklist")?.isEnabled = mode != AutoStartMode.OFF
+                    findPreference<Preference>("auto_start_apps_allowed")?.isEnabled = mode != AutoStartMode.OFF
 
 
                     // On Android N and above we unbind notification service when autostart is disabled and
