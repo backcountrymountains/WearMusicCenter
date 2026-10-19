@@ -18,6 +18,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.preference.DialogPreference
 import androidx.preference.PreferenceDialogFragmentCompat
 import com.matejdro.wearmusiccenter.R
+import com.matejdro.wearmusiccenter.config.AutoStartApps
 import com.matejdro.wearutils.preferences.compat.PreferenceWithDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
@@ -30,8 +31,9 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
     DialogPreference(context, attributeSet), PreferenceWithDialog {
     var appList: List<App>? = null
 
-    var blacklist: MutableSet<String>
-        get() = getPersistedStringSet(emptySet())
+    /** Null until the user (or the legacy-blacklist migration) has saved a list. */
+    var allowed: MutableSet<String>?
+        get() = getPersistedStringSet(null)
         set(value) {
             persistStringSet(value)
         }
@@ -49,6 +51,9 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
             progressDialog.show()
 
             appList = getAllApps()
+            withContext(Dispatchers.Default) {
+                AutoStartApps.migrateBlacklist(context, sharedPreferences!!)
+            }
 
             progressDialog.hide()
             preferenceManager.showDialog(this@MusicAppListPreference)
@@ -87,7 +92,7 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
 
         private lateinit var installedApps: List<App>
 
-        /** Packages allowed to auto-start, i.e. everything not on the persisted blacklist. */
+        /** Packages allowed to auto-start, exactly as persisted. */
         private val allowedPackages = HashSet<String>()
 
         private var filteredApps: List<App> = emptyList()
@@ -99,10 +104,14 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
         override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
             installedApps = (preference as MusicAppListPreference).appList ?: emptyList()
 
-            val savedBlacklist = (preference as MusicAppListPreference).blacklist
+            // Never configured means every app may auto-start, so show them all ticked.
+            val saved = (preference as MusicAppListPreference).allowed
             allowedPackages.clear()
-            installedApps.filterNot { savedBlacklist.contains(it.pkg) }
-                .mapTo(allowedPackages) { it.pkg }
+            if (saved != null) {
+                allowedPackages.addAll(saved)
+            } else {
+                installedApps.mapTo(allowedPackages) { it.pkg }
+            }
 
             return super.onCreateDialog(savedInstanceState)
         }
@@ -112,11 +121,7 @@ constructor(context: Context, attributeSet: AttributeSet? = null) :
                 return
             }
 
-            val newBlacklist = HashSet<String>(installedApps
-                .filterNot { allowedPackages.contains(it.pkg) }
-                .map { it.pkg })
-
-            (preference as MusicAppListPreference).blacklist = newBlacklist
+            (preference as MusicAppListPreference).allowed = HashSet(allowedPackages)
         }
 
         override fun onPrepareDialogBuilder(builder: AlertDialog.Builder) {

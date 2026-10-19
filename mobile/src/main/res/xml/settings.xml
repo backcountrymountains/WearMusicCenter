@@ -80,7 +80,7 @@
             app:defaultValue="OFF" />
 
         <com.matejdro.wearmusiccenter.view.settings.MusicAppListPreference
-            android:key="auto_start_apps_blacklist"
+            android:key="auto_start_apps_allowed"
             android:title="@string/setting_auto_start_apps_blacklist"
             android:summary="@string/setting_auto_start_apps_blacklist_description" />
         <com.matejdro.wearutils.preferences.compat.NumericEditTextPreference

@@ -17,6 +17,7 @@ import com.google.android.gms.wearable.Wearable
 import com.matejdro.wearmusiccenter.common.CommPaths
 import com.matejdro.wearmusiccenter.common.MiscPreferences
 import com.matejdro.wearmusiccenter.common.model.AutoStartMode
+import com.matejdro.wearmusiccenter.config.AutoStartApps
 import com.matejdro.wearmusiccenter.music.ActiveMediaSessionProvider
 import com.matejdro.wearmusiccenter.music.MusicService
 import com.matejdro.wearmusiccenter.music.isPlaying
@@ -141,9 +142,11 @@ class NotificationService : NotificationListenerService() {
         // Gate on a *live* session, not on `active`. A silently killed watch app
         // leaves `active` true forever, which used to suppress auto-start for good.
         if (!MusicService.hasLiveWatchSession() && it?.data?.playbackState?.isPlaying() == true) {
-            val autoStartBlacklist = Preferences.getStringSet(preferences, MiscPreferences.AUTO_START_APP_BLACKLIST)
-            if (!autoStartBlacklist.contains(it.data?.packageName)) {
+            val packageName = it.data?.packageName
+            if (AutoStartApps.isAllowed(this, preferences, packageName)) {
                 startAppOnWatch()
+            } else {
+                Timber.d("Auto-start: %s not allowed", packageName)
             }
         }
     }
